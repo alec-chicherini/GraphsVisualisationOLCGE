@@ -1,6 +1,6 @@
 #define OLC_PGE_APPLICATION
-#include "olcPixelGameEngine.h"
-#include "Real_World_Algorithms.h"
+#include "olcPixelGameEngine.h"//https://github.com/OneLoneCoder/olcPixelGameEngine
+#include "Real_World_Algorithms.h"//https://github.com/ikvasir/Real_World_Algorithms
 #include <algorithm>
 #include <numbers>
 #include <chrono>
