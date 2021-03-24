@@ -1,34 +1,39 @@
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"//https://github.com/OneLoneCoder/olcPixelGameEngine
 #include "Real_World_Algorithms.h"//https://github.com/ikvasir/Real_World_Algorithms
+#include "timedelay.h"
+#include "timedelay.cpp"
 #include <algorithm>
 #include <numbers>
 #include <chrono>
 #include <thread>
 #include <future>
 
-#define SCREEN_SIZE_X 1000
-#define SCREEN_SIZE_Y 1000
+#define SCREEN_SIZE_X 800
+#define SCREEN_SIZE_Y 800
 #define CIRCLE_RADIUS 30
 #define BUTTON_HEIGHT int32_t(50)
 #define BUTTON_WIDTH int32_t(400)
+#define INFO_BAR_HEIGHT int32_t(50)
 
 //number of squears horisontally and vertically in labirinth task
 //change this like 100,100 or 10,10 or 5,10 
-#define FIELD_SIZE_X int32_t(25)
-#define FIELD_SIZE_Y int32_t(25)
+#define FIELD_SIZE_X int32_t(20)
+#define FIELD_SIZE_Y int32_t(20)
 
-//delay in labirinth drawing in ms
-#define DRAW_DELAY 10
+//delay drawing in ms
+#define LABIRINTH_DRAW_DELAY 10
+#define GRAPH_DRAW_DELAY 1000
+
+//graph size
+#define GRAPH_VERTEXES_COUNT 3
 
 
 class GraphsVisualisation : public olc::PixelGameEngine
 {
-	enum class task{welcome_screen, graph_visualisation, labirinth_visualisation};
-	enum class labirinth_task {NONE,DFS_recurcive, DFS_stack, BFS, Random,Clear};
-
-	task task_selected = task::welcome_screen;
-	labirinth_task ltask_selected = labirinth_task::NONE;
+	enum class task{welcome_screen, graph_visualisation, labirinth_visualisation} task_selected = task::welcome_screen;
+	enum class labirinth_task {NONE,DFS_recurcive, DFS_stack, BFS, Random,Clear}ltask_selected = labirinth_task::NONE;
+	enum class graph_visualisation{NONE, bipartite_check, ReGen}gtask_selected = graph_visualisation::NONE;
 
 	graph<int, FIELD_SIZE_X * FIELD_SIZE_Y> labirint_graph;
 
@@ -39,6 +44,7 @@ class GraphsVisualisation : public olc::PixelGameEngine
 		int32_t radius;
 		std::string sname;
 		int iname;
+		olc::Pixel color=olc::WHITE;
 	};
 	
 	struct GraphEdge
@@ -54,7 +60,7 @@ class GraphsVisualisation : public olc::PixelGameEngine
 		std::pair<olc::vf2d, olc::vf2d> pos;
 		std::pair<int, int> name;
 	};
-
+	graph<int, GRAPH_VERTEXES_COUNT> graph_;
 	std::vector<GraphVertex> vertexes_;
 	std::vector<GraphEdge> edges_;
 
@@ -88,7 +94,6 @@ class GraphsVisualisation : public olc::PixelGameEngine
 			e.pos.first = pos1;
 			e.pos.second = pos2;
 
-			
 		}
 	};
 
@@ -109,6 +114,15 @@ class GraphsVisualisation : public olc::PixelGameEngine
 			edgs.push_back(GraphEdge(e.first,pos1, e.second,pos2));
 		}
 		return std::move(edgs);
+	};
+
+	void graphReGen() {
+		graph_.cleanup();
+		graph_ = generateRandomGraph<int, GRAPH_VERTEXES_COUNT>();
+		vertexes_.clear();
+		vertexes_ = generateRandomVertexesPos(graph_);
+		edges_.clear();
+		edges_ = generateEdgesPos(vertexes_, graph_);
 	};
 
 	void mouseControlling() {
@@ -135,25 +149,25 @@ class GraphsVisualisation : public olc::PixelGameEngine
 				for(auto& b : buttons_[static_cast<int32_t>(task_selected)])
 					if(isPointOverlapRect(GetMouseX(), GetMouseY(), b.possition.x, b.possition.y, b.size.x, b.size.y))
 				{
-						if (b.text == "RandomGraph") {
-							task_selected = task::graph_visualisation;
-
-							graph<int, 10> graph_ = generateRandomGraph<int, 10>();
-							graph_.DFS_recurcive(0);
-							vertexes_ = generateRandomVertexesPos(graph_);
-							edges_ = generateEdgesPos(vertexes_, graph_);
-
-						}
+						if (b.text == "RandomGraph") {task_selected = task::graph_visualisation;graphReGen();}
 						else if (b.text == "2d labirinth creation") {
 							task_selected = task::labirinth_visualisation;
 							labirint_graph = generateLabirinthGraph<int, FIELD_SIZE_X, FIELD_SIZE_Y>();
 						}
-						else if (b.text == "Menu")task_selected = task::welcome_screen;
+						else if (b.text == "Menu") {
+							task_selected = task::welcome_screen;
+							gtask_selected = graph_visualisation::NONE;
+							ltask_selected = labirinth_task::NONE;
+							visualisation_func_lunched = false;
+					
+						}
 						else if (b.text == "DFS_recurcive") ltask_selected = labirinth_task::DFS_recurcive;
 						else if (b.text == "DFS_stack")ltask_selected = labirinth_task::DFS_stack;
 						else if (b.text == "BFS")ltask_selected = labirinth_task::BFS;
 						else if (b.text == "Random")ltask_selected = labirinth_task::Random;
 						else if (b.text == "Clear")ltask_selected = labirinth_task::Clear;
+						else if (b.text == "Bipartite Check")gtask_selected = graph_visualisation::bipartite_check;
+						else if (b.text == "ReGen") gtask_selected = graph_visualisation::ReGen;
 						else if (b.text == "EXIT")exit(1);
 						
 
@@ -164,7 +178,6 @@ class GraphsVisualisation : public olc::PixelGameEngine
 			if (task_selected == task::graph_visualisation)
 			{
 				pSelectedVertex = nullptr;
-
 				for (auto& v : vertexes_)
 					if (isPointOverlap(GetMouseX(), GetMouseY(), v))
 					{
@@ -196,7 +209,7 @@ class GraphsVisualisation : public olc::PixelGameEngine
 	using vec_but = typename std::vector<Button>;
 	std::vector<vec_but> buttons_;
 	int32_t current_button_pos[10]; 
-
+	
 
 	void createButton(olc::vi2d possition, olc::vi2d size, std::string text) {
 		buttons_[static_cast<int32_t>(task_selected)].push_back(Button(possition, size, text));
@@ -222,8 +235,8 @@ class GraphsVisualisation : public olc::PixelGameEngine
 		{
 			drawButton(*iter);
 		}
-		
 	};
+
 
 	///  graph
 
@@ -234,7 +247,8 @@ class GraphsVisualisation : public olc::PixelGameEngine
 			DrawLine(e.pos.first, e.pos.second);
 		}
 		for (auto& v : vertexes_) {
-			DrawCircle(v.pos, v.radius);
+			
+			DrawCircle(v.pos, v.radius,v.color);
 			DrawString(v.pos - olc::vi2d{ CIRCLE_RADIUS / 2,CIRCLE_RADIUS / 3 }, v.sname, olc::WHITE, 3);
 		}
 	};
@@ -277,11 +291,51 @@ class GraphsVisualisation : public olc::PixelGameEngine
 			DrawLine(BUTTON_WIDTH, i * SCREEN_SIZE_Y / FIELD_SIZE_Y, BUTTON_WIDTH+SCREEN_SIZE_Y, i*SCREEN_SIZE_Y/FIELD_SIZE_Y, olc::RED);
 
 	};
+	/// info bar
+	struct info_bar {
+		std::string msg;
+	};
+	using bars_vec = typename std::vector<info_bar>;
+	std::vector<bars_vec> bars_;
+
+	void createBar(std::string str) {
+		bars_[static_cast<uint32_t>(task_selected)].push_back(info_bar(str));
+	}
+
+	void drawBar(info_bar bar)
+	{
+		DrawRect(olc::vi2d{ 0,SCREEN_SIZE_Y }, olc::vi2d{SCREEN_SIZE_X+BUTTON_WIDTH,INFO_BAR_HEIGHT}, olc::WHITE);
+		DrawString(olc::vi2d{ 0,SCREEN_SIZE_Y } + olc::vi2d{ INFO_BAR_HEIGHT / 2, INFO_BAR_HEIGHT / 2 }, bar.msg, olc::WHITE, 2);
+	}
+
+	void drawBar(std::string msg)
+	{
+		//for (auto& p : current_button_pos)std::cout << p << " "; std::cout << std::endl;
+		if (bars_.empty())bars_.resize(10);
+
+		auto iter = std::find_if(bars_[static_cast<int32_t>(task_selected)].begin(), bars_[static_cast<int32_t>(task_selected)].end(), [&](info_bar bar) {return msg == bar.msg; });
+		if (iter == bars_[static_cast<int32_t>(task_selected)].end()) {
+
+			createBar(msg);
+		}
+		else
+		{
+			drawBar(*iter);
+		}
+	};
 
 	std::function<void()> visualisation_func_update = [&]() {
 		auto xy = labirint_graph.getLastVisitedNode();
 		labirinth_[xy].color = olc::GREEN;
-		std::this_thread::sleep_for(std::chrono::milliseconds(DRAW_DELAY));
+		std::this_thread::sleep_for(std::chrono::milliseconds(LABIRINTH_DRAW_DELAY));
+	};
+
+	std::function<void()> visualisation_func_update_bipartite_check = [&]() {
+		auto xy = graph_.getLastVisitedNode();
+		auto clr = graph_.getLastVisitedNodeColor();
+		vertexes_[xy].color = (clr ? olc::RED : olc::GREEN);
+		
+		std::this_thread::sleep_for(std::chrono::milliseconds(GRAPH_DRAW_DELAY));
 	};
 
 	 uint32_t  visualisation_func_update_color ;
@@ -291,7 +345,7 @@ class GraphsVisualisation : public olc::PixelGameEngine
 		 auto xy = labirint_graph.getLastVisitedNode();
 
 		 if (visualisation_func_update_color != labirint_graph.getNumberCurrentPath()) {
-			 visualisation_func_update_color = labirint_graph.getNumberCurrentPath();
+			 visualisation_func_update_color  = labirint_graph.getNumberCurrentPath();
 			 uint8_t r = RAND(0, 255) ;
 			 uint8_t g = RAND(0, 255) ;
 			 uint8_t b = RAND(0, 255) ;
@@ -300,22 +354,70 @@ class GraphsVisualisation : public olc::PixelGameEngine
 
 		labirinth_[xy].color = good_random_color;
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(DRAW_DELAY));
+		std::this_thread::sleep_for(std::chrono::milliseconds(LABIRINTH_DRAW_DELAY));
 	 };
+
+	std::future<void> visualisation_fut;
+	std::future<bool> visualisation_fut_bipartite;
+	bool visualisation_func_lunched = false;
+
 
 	void drawWelcomeScreen() {
 		drawButton("RandomGraph");
 		drawButton("2d labirinth creation");
 		drawButton("EXIT");
+		drawBar("Select Task");
 	};
 
+	bool result_of_bipartite;
+	timedelay Td;
+	
 	void drawGraphsVisualisation() {
 		drawGraph_1();
 		drawButton("Menu");
+		drawButton("Bipartite Check");
+		drawButton("ReGen");
+
+		if (gtask_selected == graph_visualisation::NONE)
+		drawBar("Bipartite Check to start the algorithm");
+
+		if (gtask_selected == graph_visualisation::bipartite_check)
+		{
+			if (!visualisation_func_lunched) {
+				visualisation_fut_bipartite = std::async(std::launch::async, [&] {return graph_.bipartiteGraphCheck(0, visualisation_func_update_bipartite_check); });
+				visualisation_func_lunched = true;
+				Td.addTimer("is_future_end_draw", float(float(GRAPH_DRAW_DELAY) / 1000 * (GRAPH_VERTEXES_COUNT+1)));
+			}
+
+			if (Td.checkTimer("is_future_end_draw"))
+				if (visualisation_fut_bipartite.valid())
+				{
+					visualisation_fut_bipartite.wait();
+					result_of_bipartite = visualisation_fut_bipartite.get();
+					
+					//std::cout << "result_of_bipartite = " << result_of_bipartite << std::endl;
+				}
+			
+			if (Td.checkTimer("is_future_end_draw"))
+				if (result_of_bipartite) drawBar("Graph is bipartite"); 
+				else drawBar("Graph is NOT bipartite");
+			else drawBar("Bipartite animation drawing");
+				
+		}
+
+		else if (gtask_selected == graph_visualisation::ReGen)
+		{
+			if (visualisation_fut.valid()) {
+				visualisation_fut_bipartite.get();
+				
+			}
+			gtask_selected = graph_visualisation::NONE;
+			visualisation_func_lunched = false;
+			graphReGen();
+			bars_[static_cast<int32_t>(task_selected)].clear();
+		}
 	};
 
-	std::future<void> fut;
-	bool visualisation_func_lunched = false;
 	void drawLabirinthVisualisation()
 	{
 		drawButton("Menu");
@@ -328,17 +430,19 @@ class GraphsVisualisation : public olc::PixelGameEngine
 		drawLabirinthField();
 		drawLabirinthNet();
 
+		drawBar("Select Search Algorithm");
+
 		if (ltask_selected == labirinth_task::DFS_recurcive)
 		{
 			if (!visualisation_func_lunched) {
-				fut = std::async(std::launch::async, [&] {labirint_graph.DFS_recurcive(0, visualisation_func_update); });
+				visualisation_fut = std::async(std::launch::async, [&] {labirint_graph.DFS_recurcive(0, visualisation_func_update); });
 				visualisation_func_lunched = true;
 			}
 		}
 		else if (ltask_selected == labirinth_task::DFS_stack)
 		{
 			if (!visualisation_func_lunched) {
-				fut = std::async(std::launch::async, [&] {labirint_graph.DFS_stack_2(0, visualisation_func_update); });
+				visualisation_fut = std::async(std::launch::async, [&] {labirint_graph.DFS_stack_2(0, visualisation_func_update); });
 				visualisation_func_lunched = true;
 			}
 
@@ -346,7 +450,7 @@ class GraphsVisualisation : public olc::PixelGameEngine
 		else if (ltask_selected == labirinth_task::BFS)
 		{
 			if (!visualisation_func_lunched) {
-				fut = std::async(std::launch::async, [&] {labirint_graph.BFS(0, visualisation_func_update); });
+				visualisation_fut = std::async(std::launch::async, [&] {labirint_graph.BFS(0, visualisation_func_update); });
 				visualisation_func_lunched = true;
 			}
 
@@ -354,15 +458,15 @@ class GraphsVisualisation : public olc::PixelGameEngine
 		else if (ltask_selected == labirinth_task::Random)
 		{
 			if (!visualisation_func_lunched) {
-				fut = std::async(std::launch::async, [&] {labirint_graph.DFS_stack_2_random(FIELD_SIZE_X* FIELD_SIZE_Y/2+ FIELD_SIZE_X/2, visualisation_func_update_colors); });
+				visualisation_fut = std::async(std::launch::async, [&] {labirint_graph.DFS_stack_2_random(FIELD_SIZE_X* FIELD_SIZE_Y/2+ FIELD_SIZE_X/2, visualisation_func_update_colors); });
 				visualisation_func_lunched = true;
 			}
 
 		}
 		else if (ltask_selected == labirinth_task::Clear)
 		{
-			if (fut.valid()) {
-				fut.get();
+			if (visualisation_fut.valid()) {
+				visualisation_fut.get();
 				for (auto& x : labirinth_)x.color = olc::WHITE;
 				ltask_selected = labirinth_task::NONE;
 				visualisation_func_lunched = false;
@@ -390,6 +494,7 @@ public:
 			Clear(olc::BLACK);
 			drawWelcomeScreen();
 			mouseControlling();
+			
 		}
 		else if(task_selected == task::graph_visualisation)
 		{
@@ -412,7 +517,7 @@ public:
 int main()
 {
 	GraphsVisualisation inst;
-	if (inst.Construct(BUTTON_WIDTH+ SCREEN_SIZE_X, SCREEN_SIZE_Y, 1, 1))
+	if (inst.Construct(BUTTON_WIDTH+ SCREEN_SIZE_X+1, SCREEN_SIZE_Y+ INFO_BAR_HEIGHT+1, 1, 1))
 		inst.Start();
 
 	return 0;
